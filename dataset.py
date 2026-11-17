@@ -301,8 +301,13 @@ def create_lol_dataloaders(
     batch_size: int = 8,
     num_workers: int = 2,
     pin_memory: Optional[bool] = None,
+    split_seed: int = 0,
 ) -> dict[str, DataLoader]:
-    """데이터셋을 만든 뒤 재현 가능한 학습·검증·평가 DataLoader를 반환합니다."""
+    """split_seed로 분할을 고정하고 seed로 학습 셔플 RNG를 설정합니다.
+
+    평가·검증은 원본 크기 이미지 지원을 위해 배치 크기 1을 사용합니다.
+    num_workers=0인 증강 RNG는 호출자가 random.seed로 초기화해야 합니다.
+    """
     if batch_size <= 0:
         raise ValueError("batch_size는 양의 정수여야 합니다.")
     if num_workers < 0:
@@ -315,7 +320,7 @@ def create_lol_dataloaders(
         test_high_dir=test_high_dir,
         val_ratio=val_ratio,
         test_ratio=test_ratio,
-        seed=seed,
+        seed=split_seed,
         crop_size=crop_size,
     )
     if pin_memory is None:
@@ -327,7 +332,7 @@ def create_lol_dataloaders(
         generator.manual_seed(seed + offset)
         loaders[split] = DataLoader(
             datasets[split],
-            batch_size=batch_size,
+            batch_size=batch_size if split == "train" else 1,
             shuffle=(split == "train"),
             num_workers=num_workers,
             pin_memory=pin_memory,
