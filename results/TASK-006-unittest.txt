@@ -1,0 +1,46 @@
+TASK-006 unittest 실행 로그
+브랜치: Dongsub
+기준 커밋: b8dcd78
+실행일: 2026-11-23 (KST)
+시스템: Python 3.9.6, numpy 미설치
+프로젝트 .venv: Python 3.9.6, torch 2.8.0, numpy 2.0.2, Pillow 11.3.0, CUDA 사용 불가
+
+[기본 python]
+명령: python -m unittest discover -s tests -p test_*.py -v
+종료 코드: 127
+FileNotFoundError: [Errno 2] No such file or directory: 'python'
+
+[시스템 python3]
+명령: python3 -m unittest discover -s tests -p test_*.py -v
+종료 코드: 1
+test_pipeline (unittest.loader._FailedTest) ... ERROR
+
+======================================================================
+ERROR: test_pipeline (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_pipeline
+Traceback (most recent call last):
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/unittest/loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "/Users/simdongseob/Desktop/Image_project/Image_processing_final_Project/tests/test_pipeline.py", line 8, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+
+[프로젝트 .venv]
+명령: /Users/simdongseob/Desktop/Image_project/Image_processing_final_Project/.venv/bin/python -m unittest discover -s tests -p test_*.py -v
+종료 코드: 0
+test_end_to_end (test_pipeline.PipelineTests) ... ok
+test_modes_and_gradients (test_pipeline.PipelineTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 7.654s
+
+OK
