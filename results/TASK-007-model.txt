@@ -1,0 +1,38 @@
+TASK-007 실행 기록 · DCE 계층·초기화·곡선 검증
+날짜: 2026-11-23 (KST)
+브랜치: HwanHo (기준 커밋 d8a3ff5 = main 103fc19, PR #1 병합본 반영)
+담당: 환호 (검토: 현성)
+환경: Windows, Python 3.8.2, torch 2.4.1+cpu, numpy 1.24.4, Pillow 10.4.0, CUDA 사용 불가 (CPU 검증)
+코드 수정: 없음 (model.py 그대로). 검증 테스트 tests/test_model_loss.py 신규 추가
+
+[명령]
+PYTHONUTF8=1 python -m unittest discover -s tests -v
+종료 코드: 0 (Ran 19 tests, OK: 신규 test_model_loss.py 14개 + 기존 test_pipeline.py 5개)
+
+[TASK-007 테스트 결과: DCEStructureTests 8개 모두 ok]
+test_layers_and_parameter_count ... ok
+test_skip_connections ... ok
+test_initialization ... ok
+test_output_shapes_and_curve_range ... ok
+test_eight_iteration_curve ... ok
+test_curve_sign_convention ... ok
+test_boundary_inputs ... ok
+test_gradients_finite_for_all_parameters ... ok
+
+[코드와 공식 구현 대조]
+1. 7개 Conv: 3→32, 32→32, 32→32, 32→32, 64→32, 64→32, 64→24. 모두 3×3, stride 1, padding 1.
+   → 저자 저장소 enhance_net_nopool과 일치. 파라미터 수 79,416 (논문 약 79K), 네 모드 동일.
+2. skip 연결: conv5 ← cat(x3, x4), conv6 ← cat(x2, x5), conv7 ← cat(x1, x6). forward hook으로 실제 입력 텐서를 확인.
+3. 출력: curves = tanh(conv7), [N,24,H,W], 값 범위 [-1,1]. enhanced는 [N,3,H,W]. 홀수 크기(17×23)도 확인.
+4. 곡선: 3채널씩 8회 I ← I + r·(I² − I), 채널 0~2부터 순서대로 적용. 수동 계산과 일치.
+   부호: r = +1이면 I²(어두워짐), r = −1이면 2I − I²(밝아짐). 제안서 식의 α = −r 관계를 확인.
+5. 초기화: weight ~ N(0, 0.02) (각 층 평균 |μ| < 0.003, 표준편차 0.02±0.003), bias = 0.
+6. 경계값: 입력 0과 1은 곡선의 고정점이라 none 모드 출력이 그대로 0/1. tanh 포화(r = ±1) 상태에서도
+   네 모드 모두 출력이 [0,1]이고 유한함.
+7. gradient: 네 모드 × 입력(무작위, 전부 0, 전부 1)에서 모든 학습 파라미터에 grad가 있고 모두 유한함.
+
+[참고·팀 확인 사항]
+- 공식 저장소의 weights_init은 Conv weight만 N(0,0.02)로 초기화하고 bias는 PyTorch 기본값을 둔다.
+  본 코드는 계획서 규격(bias 0)을 따른다. 결과에 큰 영향은 없을 것으로 보이며, 보고서에는 "bias 0 초기화"로 표기한다.
+- GPU·실제 LOL 입력은 이 작업 범위가 아니다(TASK-009에서 확인).
+- Windows에서는 기존 test_end_to_end가 cp949 인코딩 때문에 실패한다. PYTHONUTF8=1로 실행하면 통과한다.
