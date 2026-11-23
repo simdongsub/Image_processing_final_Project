@@ -1,0 +1,47 @@
+TASK-008 실행 기록 · 손실 구성과 가중치 검증
+날짜: 2026-11-23 (KST)
+브랜치: HwanHo (기준 커밋 d8a3ff5 = main 103fc19, PR #1 병합본 반영)
+담당: 환호 (검토: 현성)
+환경: Windows, Python 3.8.2, torch 2.4.1+cpu, numpy 1.24.4, Pillow 10.4.0, CUDA 사용 불가 (CPU 검증)
+코드 수정: 없음 (loss.py 그대로). 검증 테스트 tests/test_model_loss.py 신규 추가
+
+[명령]
+PYTHONUTF8=1 python -m unittest discover -s tests -v
+종료 코드: 0 (Ran 19 tests, OK: 신규 test_model_loss.py 14개 + 기존 test_pipeline.py 5개)
+
+[TASK-008 테스트 결과: LossTests 6개 모두 ok]
+test_matches_official_reference ... ok
+test_weights_and_total ... ok
+test_hand_computed_terms ... ok
+test_minimum_size ... ok
+test_backward_finite ... ok
+test_reference_image_not_used ... ok
+
+[수식 ↔ 코드 대조]
+저자 저장소 Myloss.py·lowlight_train.py를 테스트 안에 그대로 옮긴 참조 구현(official_losses)을 만들고,
+무작위 입력 3가지 크기(32×48, 20×37, 16×16)에서 네 항과 total이 모두 일치함을 확인.
+- 공간(L_spa): 채널 평균 → 4×4 평균 풀링 → 좌·우·상·하 이웃 차이(padding=1)의 원본/출력 차 제곱, 방향 합의 평균. 가중치 1
+- 노출(L_exp): 채널 평균 → 16×16 평균 풀링 → (값 − 0.6)² 평균. 목표 0.6, 가중치 10
+- 색(L_col): RGB 평균의 쌍별 차 제곱 Drg, Drb, Dgb → sqrt(Drg² + Drb² + Dgb²) 평균. 가중치 5
+- TV(L_tvA): 24채널 곡선의 세로·가로 차 제곱을 채널 합, 배치·위치 평균, ×2. 채널 합 유지(채널 평균 아님). 가중치 200
+- total = spatial + 10·exposure + 5·color + 200·tv
+
+[손으로 계산한 값]
+- 0.6 회색 상수 영상, 곡선 0 → 네 항과 total 모두 0
+- 밝기 0.2 상수 → exposure = (0.2 − 0.6)² = 0.16
+- RGB 평균 (0.5, 0.3, 0.2) → color = sqrt(0.2⁴ + 0.3⁴ + 0.1⁴) ≈ 0.09899
+- 세로로 0.1씩 증가하는 24채널 곡선 → tv = 2 × 24 × 0.01 = 0.48 (채널 합 유지 확인)
+- 원본 0.2 상수 → 출력 0.6 상수 (16×16) → spatial = 0.16
+  (공식 구현의 zero padding 때문에 4×4 풀링 격자의 테두리에서만 차이가 생김: 16개 방향 × 0.4² / 16칸)
+
+[입력 조건·역전파]
+- 16×16은 정상 동작, 15×16·16×15·8×8은 ValueError로 거부 (노출 항의 16×16 풀링 때문)
+- 16의 배수가 아닌 크기(20×37)는 남는 행·열을 버리는 공식 동작과 같음
+- enhanced·curves에 대한 gradient가 무작위 입력과 RGB가 같은 상수 영상 모두에서 유한함
+- ZeroDCELoss.forward 인자는 (original, enhanced, curves)뿐이며 high(정답)는 받지 않음.
+  train.py도 objective(low, enhanced, curves)로 호출함
+
+[참고·팀 확인 사항]
+- 색 손실은 공식 sqrt 대신 torch.norm을 쓴다. 값은 같고, RGB 평균이 완전히 같을 때(차이 0)도
+  gradient가 NaN이 되지 않는다(공식 sqrt는 0에서 미분이 무한대).
+- 공간 손실의 테두리 효과는 공식 구현과 같은 동작이며 버그가 아니다. 보고서의 손실 설명에 참고할 수 있다.
