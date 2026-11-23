@@ -1,0 +1,103 @@
+TASK-005 실행 기록
+날짜: 2026-11-23 (KST)
+브랜치: Dongsub
+실제 LOL 데이터: 미확보, 아래 장수와 배치는 합성 데이터 검증값
+
+[합성 데이터 분할 감사]
+명령: /Users/simdongseob/Desktop/Image_project/Image_processing_final_Project/.venv/bin/python dataset.py --train-low /var/folders/8r/gnv6tg294pg7jdljrj5krxxr0000gn/T/tmpro_b2o02/train/low --train-high /var/folders/8r/gnv6tg294pg7jdljrj5krxxr0000gn/T/tmpro_b2o02/train/high --test-low /var/folders/8r/gnv6tg294pg7jdljrj5krxxr0000gn/T/tmpro_b2o02/test/low --test-high /var/folders/8r/gnv6tg294pg7jdljrj5krxxr0000gn/T/tmpro_b2o02/test/high --crop-size 16 --val-ratio 0.1 --split-seed 7
+종료 코드: 0
+{
+  "splits": {
+    "train": {
+      "low": 20,
+      "high": 20,
+      "matched": 20,
+      "valid_pairs": 20,
+      "missing_high": 0,
+      "missing_low": 0,
+      "duplicate_names": 0,
+      "unsupported_files": 0,
+      "size_mismatches": 0,
+      "corrupt_files": 0,
+      "format_mismatches": 0,
+      "too_small_for_crop": 0,
+      "low_resolutions": {
+        "24x24": 20
+      },
+      "high_resolutions": {
+        "24x24": 20
+      }
+    },
+    "test": {
+      "low": 3,
+      "high": 3,
+      "matched": 3,
+      "valid_pairs": 3,
+      "missing_high": 0,
+      "missing_low": 0,
+      "duplicate_names": 0,
+      "unsupported_files": 0,
+      "size_mismatches": 0,
+      "corrupt_files": 0,
+      "format_mismatches": 0,
+      "too_small_for_crop": 0,
+      "low_resolutions": {
+        "24x24": 3
+      },
+      "high_resolutions": {
+        "24x24": 3
+      }
+    }
+  },
+  "partition": {
+    "split_seed": 7,
+    "val_ratio": 0.1,
+    "counts": {
+      "train": 18,
+      "val": 2,
+      "test": 3
+    },
+    "overlap": {
+      "train_val": {
+        "low_same_path": 0,
+        "low_same_content": 0,
+        "high_same_path": 0,
+        "high_same_content": 0
+      },
+      "train_test": {
+        "low_same_path": 0,
+        "low_same_content": 0,
+        "high_same_path": 0,
+        "high_same_content": 0
+      },
+      "val_test": {
+        "low_same_path": 0,
+        "low_same_content": 0,
+        "high_same_path": 0,
+        "high_same_content": 0
+      }
+    }
+  },
+  "issues": []
+}
+
+[합성 첫 배치] shape=(4, 3, 16, 16), dtype=torch.float32, min=0.047059, max=0.094118
+
+[실제 데이터 예시 경로 확인]
+명령: .venv/bin/python dataset.py --train-low data/LOL/our485/low --train-high data/LOL/our485/high --test-low data/LOL/eval15/low --test-high data/LOL/eval15/high --crop-size 128 --val-ratio 0.1 --split-seed 0
+종료 코드: 1
+결과: 네 low/high 폴더가 없어 partition=null, 실제 장수·중복·배치 규격 미검증
+
+[최종 코드 unittest]
+명령: /Users/simdongseob/Desktop/Image_project/Image_processing_final_Project/.venv/bin/python -m unittest discover -s tests -p test_*.py -v
+종료 코드: 0
+test_dataset_integrity_audit (test_pipeline.PipelineTests) ... ok
+test_end_to_end (test_pipeline.PipelineTests) ... ok
+test_modes_and_gradients (test_pipeline.PipelineTests) ... ok
+test_paired_spatial_augmentation (test_pipeline.PipelineTests) ... ok
+test_split_contract_and_batches (test_pipeline.PipelineTests) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 8.857s
+
+OK

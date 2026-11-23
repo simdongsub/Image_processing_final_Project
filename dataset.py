@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
+from collections import Counter
+import hashlib
+import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -341,3 +345,166 @@ def create_lol_dataloaders(
             persistent_workers=(num_workers > 0),
         )
     return loaders
+
+
+def audit_lol_splits(
+    train_low: str | Path,
+    train_high: str | Path,
+    test_low: str | Path,
+    test_high: str | Path,
+    crop_size: int = 128,
+    val_ratio: float = 0.1,
+    split_seed: int = 0,
+) -> dict:
+    """실제 파일과 고정 분할의 쌍·손상·중복을 점검합니다."""
+    if crop_size < 1:
+        raise ValueError("crop_size는 양의 정수여야 합니다.")
+    if not 0 < val_ratio < 1:
+        raise ValueError("val_ratio는 0과 1 사이여야 합니다.")
+
+    report: dict = {"splits": {}, "partition": None, "issues": []}
+    paths: dict[str, dict[str, set[Path]]] = {}
+    digest_by_path: dict[Path, str] = {}
+    formats = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG",
+               ".bmp": "BMP", ".tif": "TIFF", ".tiff": "TIFF"}
+
+    for split, roots in (
+        ("train", {"low": Path(train_low).expanduser(), "high": Path(train_high).expanduser()}),
+        ("test", {"low": Path(test_low).expanduser(), "high": Path(test_high).expanduser()}),
+    ):
+        indexes: dict[str, dict[str, Path]] = {}
+        image_info: dict[Path, tuple[tuple[int, int], bool]] = {}
+        paths[split] = {"low": set(), "high": set()}
+        summary = {"low": None, "high": None, "matched": 0, "valid_pairs": 0,
+                   "missing_high": 0, "missing_low": 0, "duplicate_names": 0,
+                   "unsupported_files": 0, "size_mismatches": 0, "corrupt_files": 0,
+                   "format_mismatches": 0, "too_small_for_crop": 0,
+                   "low_resolutions": {}, "high_resolutions": {}}
+        report["splits"][split] = summary
+
+        for role, root in roots.items():
+            if not root.is_dir():
+                report["issues"].append(f"{split}/{role}: 폴더 없음 또는 접근 불가: {root}")
+                indexes[role] = {}
+                continue
+            try:
+                files = [path for path in root.rglob("*") if path.is_file()]
+            except OSError as exc:
+                report["issues"].append(f"{split}/{role}: 목록 읽기 실패: {exc}")
+                indexes[role] = {}
+                continue
+            images = [path for path in files if path.suffix.lower() in IMAGE_SUFFIXES]
+            unsupported = [path for path in files if not path.name.startswith(".")
+                           and path.suffix.lower() not in IMAGE_SUFFIXES]
+            summary[role] = len(images)
+            summary["unsupported_files"] += len(unsupported)
+            for path in unsupported:
+                report["issues"].append(f"{split}/{role}: 지원하지 않는 파일: {path}")
+            counts = Counter(_relative_key(path, root) for path in images)
+            duplicates = [key for key, count in counts.items() if count > 1]
+            summary["duplicate_names"] += len(duplicates)
+            for key in duplicates:
+                report["issues"].append(f"{split}/{role}: 중복 이름: {key}")
+            indexes[role] = {_relative_key(path, root): path for path in images}
+            paths[split][role] = {path.resolve() for path in images}
+            if not images:
+                report["issues"].append(f"{split}/{role}: 이미지 파일 없음: {root}")
+            for path in images:
+                try:
+                    with Image.open(path) as image:
+                        image.load()
+                        size = image.size
+                        valid_format = image.format == formats[path.suffix.lower()]
+                        if not valid_format:
+                            summary["format_mismatches"] += 1
+                            report["issues"].append(
+                                f"{split}/{role}: 확장자와 실제 형식 불일치: {path} ({image.format})")
+                    image_info[path] = (size, valid_format)
+                    resolution = f"{size[0]}x{size[1]}"
+                    resolutions = summary[f"{role}_resolutions"]
+                    resolutions[resolution] = resolutions.get(resolution, 0) + 1
+                    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                    digest_by_path[path.resolve()] = digest
+                except (OSError, UnidentifiedImageError) as exc:
+                    summary["corrupt_files"] += 1
+                    report["issues"].append(f"{split}/{role}: 읽기 또는 디코딩 실패: {path} ({exc})")
+
+        if summary["low"] is None or summary["high"] is None:
+            for field in ("matched", "valid_pairs", "missing_high", "missing_low",
+                          "duplicate_names", "unsupported_files", "size_mismatches",
+                          "corrupt_files", "format_mismatches", "too_small_for_crop",
+                          "low_resolutions", "high_resolutions"):
+                summary[field] = None
+            continue
+
+        low_keys, high_keys = set(indexes["low"]), set(indexes["high"])
+        missing_high, missing_low = low_keys - high_keys, high_keys - low_keys
+        summary["missing_high"], summary["missing_low"] = len(missing_high), len(missing_low)
+        for key in sorted(missing_high):
+            report["issues"].append(f"{split}: high 누락: {key}")
+        for key in sorted(missing_low):
+            report["issues"].append(f"{split}: low 누락: {key}")
+        summary["matched"] = len(low_keys & high_keys)
+
+        for key in sorted(low_keys & high_keys):
+            low_info = image_info.get(indexes["low"][key])
+            high_info = image_info.get(indexes["high"][key])
+            if low_info is None or high_info is None or not low_info[1] or not high_info[1]:
+                continue
+            if low_info[0] != high_info[0]:
+                summary["size_mismatches"] += 1
+                report["issues"].append(f"{split}: 크기 불일치: {key} low={low_info[0]}, high={high_info[0]}")
+                continue
+            if split == "train" and min(low_info[0]) < crop_size:
+                summary["too_small_for_crop"] += 1
+                report["issues"].append(f"train: crop_size={crop_size}보다 작은 이미지: {key} {low_info[0]}")
+                continue
+            summary["valid_pairs"] += 1
+
+    for split in ("train", "test"):
+        repeated_within_pair = paths[split]["low"] & paths[split]["high"]
+        if repeated_within_pair:
+            report["issues"].append(f"{split}: low/high가 같은 파일을 참조: {len(repeated_within_pair)}개")
+
+    if not report["issues"]:
+        try:
+            datasets = create_lol_datasets(train_low, train_high, test_low, test_high,
+                                           val_ratio=val_ratio, seed=split_seed,
+                                           crop_size=crop_size)
+        except (ValueError, FileNotFoundError) as exc:
+            report["issues"].append(f"분할 생성 실패: {exc}")
+        else:
+            partition = {"split_seed": split_seed, "val_ratio": val_ratio,
+                         "counts": {name: len(dataset) for name, dataset in datasets.items()},
+                         "overlap": {}}
+            report["partition"] = partition
+            for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
+                details = {}
+                for role in ("low", "high"):
+                    left_paths = {getattr(pair, role).resolve() for pair in datasets[left].pairs}
+                    right_paths = {getattr(pair, role).resolve() for pair in datasets[right].pairs}
+                    details[f"{role}_same_path"] = len(left_paths & right_paths)
+                    left_hashes = {digest_by_path[path] for path in left_paths}
+                    details[f"{role}_same_content"] = sum(
+                        digest_by_path[path] in left_hashes for path in right_paths)
+                partition["overlap"][f"{left}_{right}"] = details
+                if any(details.values()):
+                    report["issues"].append(f"{left}/{right} 파일 중복: {details}")
+    return report
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="LOL 학습/평가 이미지 무결성 점검")
+    parser.add_argument("--train-low", required=True)
+    parser.add_argument("--train-high", required=True)
+    parser.add_argument("--test-low", required=True)
+    parser.add_argument("--test-high", required=True)
+    parser.add_argument("--crop-size", type=int, default=128)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
+    parser.add_argument("--split-seed", type=int, default=0)
+    args = parser.parse_args()
+    result = audit_lol_splits(args.train_low, args.train_high, args.test_low,
+                              args.test_high, args.crop_size, args.val_ratio,
+                              args.split_seed)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    raise SystemExit(bool(result["issues"]))
