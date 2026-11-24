@@ -1,0 +1,59 @@
+TASK-004·005 Colab 전체 데이터 감사 기록
+날짜: 2026-11-24 (KST)
+증거 출처: 사용자가 대화에서 전달한 Colab 실행 출력
+원본 로그 위치: /content/drive/MyDrive/TASK-004-005-colab-audit.txt
+실행 코드: /content/Image_processing_final_Project/dataset.py
+입력: /content/LOL/our485/{low,high}, /content/LOL/eval15/{low,high}
+명령: /usr/bin/python3 /content/Image_processing_final_Project/dataset.py --train-low /content/LOL/our485/low --train-high /content/LOL/our485/high --test-low /content/LOL/eval15/low --test-high /content/LOL/eval15/high --crop-size 128 --val-ratio 0.1 --split-seed 0
+종료 코드: 0
+
+{
+  "splits": {
+    "train": {
+      "low": 485,
+      "high": 485,
+      "matched": 485,
+      "valid_pairs": 485,
+      "missing_high": 0,
+      "missing_low": 0,
+      "duplicate_names": 0,
+      "unsupported_files": 0,
+      "size_mismatches": 0,
+      "corrupt_files": 0,
+      "format_mismatches": 0,
+      "too_small_for_crop": 0,
+      "low_resolutions": {"600x400": 485},
+      "high_resolutions": {"600x400": 485}
+    },
+    "test": {
+      "low": 15,
+      "high": 15,
+      "matched": 15,
+      "valid_pairs": 15,
+      "missing_high": 0,
+      "missing_low": 0,
+      "duplicate_names": 0,
+      "unsupported_files": 0,
+      "size_mismatches": 0,
+      "corrupt_files": 0,
+      "format_mismatches": 0,
+      "too_small_for_crop": 0,
+      "low_resolutions": {"600x400": 15},
+      "high_resolutions": {"600x400": 15}
+    }
+  },
+  "partition": {
+    "split_seed": 0,
+    "val_ratio": 0.1,
+    "counts": {"train": 437, "val": 48, "test": 15},
+    "overlap": {
+      "train_val": {"low_same_path": 0, "low_same_content": 0, "high_same_path": 0, "high_same_content": 0},
+      "train_test": {"low_same_path": 0, "low_same_content": 0, "high_same_path": 0, "high_same_content": 0},
+      "val_test": {"low_same_path": 0, "low_same_content": 0, "high_same_path": 0, "high_same_content": 0}
+    }
+  },
+  "issues": []
+}
+
+해석: dataset.py의 audit_lol_splits가 전체 1,000장에 대해 Pillow image.load()를 호출한다. 이 실행에서 디코딩 실패·파일 쌍 오류·분할 간 동일 경로/동일 바이트 내용 중복이 보고되지 않았다.
+범위: 실제 다운로드 출처·사용 조건과 환호 검토는 이 CLI로 확인하지 않았다.

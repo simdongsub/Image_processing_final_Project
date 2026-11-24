@@ -110,3 +110,5 @@ OK
 실제 이미지 일부 로컬 디코딩 후 배치 확인: train low 원본 8장 -> [8,3,128,128] float32 [0,0.796078]; val 10.png -> low/high 각 [1,3,400,600]; test 111.png -> low/high 각 [1,3,400,600]. val/test는 batch 1, 학습 입력에는 high 미포함.
 최종 합성 unittest: .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v -> 5 tests OK.
 제한: 전체 1,000장의 Pillow 디코딩 및 로컬 전체 데이터에 대한 dataset.py CLI는 미실행. Drive 원본 바이트의 PNG 구조 검사·내용 비교와 실제 11장 Pillow 디코딩으로 검증. 유사 장면이나 픽셀상 근접 중복은 검사 범위 밖.
+
+2026-11-24 Colab 후속 전체 감사: 사용자가 전체 LOL 데이터에서 dataset.py CLI를 실행하고 종료 코드 0, train/val/test 437/48/15, 분할 간 동일 경로·동일 바이트 내용 중복 전부 0, issues=[] 출력을 전달함. 전달된 출력은 results/TASK-004-005-colab-audit.txt에 기록. 위의 '전체 데이터 CLI 미실행' 제한은 이 후속 실행으로 해소됨. 환호 검토 및 유사 장면·픽셀상 근접 중복 검사는 별도.

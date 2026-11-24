@@ -124,3 +124,5 @@ OK
 공식 분할 추정: 폴더명·485/15쌍·600x400은 LOL-v1 배포 설명과 부합. 실제 다운로드 경로·재배포/사용 조건은 Drive 파일만으로 확인 불가.
 제한: 전체 1,000장의 Pillow 픽셀 디코딩은 로컬 전체 데이터 부재로 미실행. PNG 청크 CRC 검사는 압축 스트림 디코딩 자체를 대체하지 않음.
 Drive 배치: 내 드라이브 루트 data 폴더(https://drive.google.com/drive/folders/1UKXVrbpDFYUpatH41tTl5pe-iaFNfi3c)에 사용자가 바로가기를 추가함. 연결 도구로 MIME 유형 application/vnd.google-apps.shortcut와 위치를 확인하고 이름을 `LOL의 사본`에서 노트북 경로에 맞는 `LOL`로 변경함. 사용자가 `data/LOL` 안의 `our485`와 `eval15` 폴더를 확인함.
+
+2026-11-24 Colab 후속 전체 감사: 사용자가 /content/LOL로 전체 데이터를 복사한 뒤 /content/Image_processing_final_Project/dataset.py CLI 결과를 전달함. 종료 코드 0, 학습 485쌍·공식 test 15쌍 모두 유효, 전체 1,000장 Pillow image.load() 디코딩 실패 0건, issues=[] 확인. 원본 로그는 사용자의 Drive /content/drive/MyDrive/TASK-004-005-colab-audit.txt에 저장됨. 전달된 출력은 results/TASK-004-005-colab-audit.txt에 기록. 위의 '전체 디코딩 미실행' 제한은 이 후속 실행으로 해소됨. 실제 다운로드 출처·사용 조건과 환호 검토는 계속 대기.
