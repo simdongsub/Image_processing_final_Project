@@ -145,9 +145,15 @@ class PipelineTests(unittest.TestCase):
                                 for overlap in result['partition']['overlap'].values()))
             train_pair = first['train'].dataset.pairs[0]
             val_pair = first['val'].dataset.pairs[0]
+            original_val_low = val_pair.low.read_bytes()
             val_pair.low.write_bytes(train_pair.low.read_bytes())
+            self.assertEqual(audit()['partition']['overlap']['train_val']['low_same_content'], 0)
+            val_pair.low.write_bytes(original_val_low)
             val_pair.high.write_bytes(train_pair.high.read_bytes())
-            self.assertTrue(any('train/val 파일 중복' in issue for issue in audit()['issues']))
+            grouped = audit()
+            self.assertEqual(grouped['issues'], [])
+            self.assertEqual(grouped['partition']['counts'], {'train': 18, 'val': 2, 'test': 3})
+            self.assertEqual(grouped['partition']['overlap']['train_val']['high_same_content'], 0)
 
     def test_paired_spatial_augmentation(self):
         with tempfile.TemporaryDirectory() as tmp:

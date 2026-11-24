@@ -101,3 +101,12 @@ test_split_contract_and_batches (test_pipeline.PipelineTests) ... ok
 Ran 5 tests in 8.857s
 
 OK
+
+2026-11-24 실제 Drive 데이터 추가 검증
+입력: 공유 LOL 폴더(경로는 TASK-004 기록), train 485쌍 / 공식 test 15쌍
+기존 split_seed=0, val_ratio=0.1: train 437 / val 48 / test 15. 경로·이름 중복 0이나 high의 동일 바이트 파일이 train/val에 걸쳐 13그룹, val 기준 15장 중복. 기존 무작위 쌍 분할의 검증 누수 확인.
+수정: dataset.py에서 low 또는 high 바이트 SHA-256이 같은 쌍을 같은 분할에 배정. 원본 파일은 변경하지 않음.
+수정 후 실제 파일 목록·내용 중복 그룹으로 코드 분할 실행: train 437 / val 48 / test 15, train/val/test 이름 교집합 0, low/high 내용 교집합 0. split_seed=0 재실행 manifest 동일. 결과: results/TASK-005-manifest.json
+실제 이미지 일부 로컬 디코딩 후 배치 확인: train low 원본 8장 -> [8,3,128,128] float32 [0,0.796078]; val 10.png -> low/high 각 [1,3,400,600]; test 111.png -> low/high 각 [1,3,400,600]. val/test는 batch 1, 학습 입력에는 high 미포함.
+최종 합성 unittest: .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v -> 5 tests OK.
+제한: 전체 1,000장의 Pillow 디코딩 및 로컬 전체 데이터에 대한 dataset.py CLI는 미실행. Drive 원본 바이트의 PNG 구조 검사·내용 비교와 실제 11장 Pillow 디코딩으로 검증. 유사 장면이나 픽셀상 근접 중복은 검사 범위 밖.
