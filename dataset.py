@@ -149,6 +149,53 @@ def split_pairs(
     )
 
 
+def _split_train_val_without_content_overlap(
+    pairs: Sequence[ImagePair], val_ratio: float, seed: int
+) -> tuple[list[ImagePair], list[ImagePair]]:
+    """같은 low 또는 high 바이트를 가진 쌍을 한 분할에 묶습니다."""
+    base_train, base_val, _ = split_pairs(
+        pairs, (1.0 - val_ratio, val_ratio, 0.0), seed
+    )
+    parent = list(range(len(pairs)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    seen: dict[tuple[str, str], int] = {}
+    for index, pair in enumerate(pairs):
+        for role in ("low", "high"):
+            path = getattr(pair, role)
+            if path is None:
+                continue
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            key = (role, digest)
+            if key in seen:
+                parent[find(index)] = find(seen[key])
+            else:
+                seen[key] = index
+
+    groups: dict[int, list[int]] = {}
+    for index in range(len(pairs)):
+        groups.setdefault(find(index), []).append(index)
+    if len(groups) == len(pairs):
+        return base_train, base_val
+
+    shuffled_groups = list(groups.values())
+    random.Random(seed).shuffle(shuffled_groups)
+    val_indices: set[int] = set()
+    for group in shuffled_groups:
+        if len(val_indices) + len(group) <= len(base_val):
+            val_indices.update(group)
+    if not val_indices or len(val_indices) == len(pairs):
+        raise ValueError("중복 내용을 분리하지 않고 train/val을 만들 수 없습니다.")
+    train = [pair for index, pair in enumerate(pairs) if index not in val_indices]
+    val = [pair for index, pair in enumerate(pairs) if index in val_indices]
+    return train, val
+
+
 class LowLightDataset(Dataset):
     """RGB 이미지를 0~1 텐서로 읽고 학습 시 동일한 공간 증강을 적용합니다."""
 
@@ -270,8 +317,8 @@ def create_lol_datasets(
         )
     else:
         test_pairs = discover_image_pairs(test_low_dir, test_high_dir)
-        train_pairs, val_pairs, _ = split_pairs(
-            pairs, (1.0 - val_ratio, val_ratio, 0.0), seed
+        train_pairs, val_pairs = _split_train_val_without_content_overlap(
+            pairs, val_ratio, seed
         )
         train_low_paths = {pair.low.resolve() for pair in train_pairs + val_pairs}
         test_low_paths = {pair.low.resolve() for pair in test_pairs}

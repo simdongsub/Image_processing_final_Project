@@ -109,3 +109,18 @@ OK
   },
   "issues": []
 }
+
+2026-11-24 실제 Drive 데이터 추가 검증
+원본: https://drive.google.com/drive/folders/1EVxcAMhHSJes04PDHd1U_vwCCtk51V8b
+접근: Google Drive 연결 도구로 공유 LOL 폴더 및 하위 폴더 열람·원본 파일 읽기 성공
+구조: our485/{low,high}, eval15/{low,high}
+개수: our485 low/high 각 485 PNG, eval15 low/high 각 15 PNG
+추가 파일: our485 low/high에 .DS_Store 각 1개(검사 코드가 숨김 파일로 무시)
+대응: 확장자 제외 이름 기준 각 분할 누락·중복 이름 0, 학습/평가 파일명 교집합 0
+해상도: PNG IHDR 기준 전체 1,000장 모두 600x400, 대응 쌍 크기 불일치 0, 128 크롭 가능
+파일 구조: 원본 1,000장 전부 수신해 PNG 서명·전 청크 CRC·IEND·메타데이터 크기 일치 확인, 오류 0
+실제 디코딩: 원본 11장을 임시 폴더로 내려받아 Pillow image.load() 성공. train 10.png와 test 111.png low/high를 열어 장면 정렬 육안 확인.
+내용 중복: our485 high에서 서로 다른 이름의 동일 바이트 파일 66그룹(152장)을 원본 base64 전체 비교로 확인. 대응 이름·크기는 정상이며 삭제·수정하지 않음.
+공식 분할 추정: 폴더명·485/15쌍·600x400은 LOL-v1 배포 설명과 부합. 실제 다운로드 경로·재배포/사용 조건은 Drive 파일만으로 확인 불가.
+제한: 전체 1,000장의 Pillow 픽셀 디코딩은 로컬 전체 데이터 부재로 미실행. PNG 청크 CRC 검사는 압축 스트림 디코딩 자체를 대체하지 않음.
+Drive 배치: 내 드라이브 루트 data 폴더(https://drive.google.com/drive/folders/1UKXVrbpDFYUpatH41tTl5pe-iaFNfi3c)에 사용자가 바로가기를 추가함. 연결 도구로 MIME 유형 application/vnd.google-apps.shortcut와 위치를 확인하고 이름을 `LOL의 사본`에서 노트북 경로에 맞는 `LOL`로 변경함. 사용자가 `data/LOL` 안의 `our485`와 `eval15` 폴더를 확인함.
