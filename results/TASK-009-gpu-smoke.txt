@@ -1,0 +1,46 @@
+TASK-009 실행 기록 · 실제 데이터 베이스라인 GPU 최소 학습
+날짜: 2026-11-24 (KST, 출력 전달일 기준)
+담당: 환호 (검토: 동섭)
+실행: Google Colab, colab/experiment.ipynb의 TASK-009 셀 (환호가 실행하고 출력을 전달)
+범위: none 모드 학습 배치 1개, optimizer step 1회. 본 학습·성능 평가 아님, 체크포인트 저장 없음
+설정: Adam lr=1e-4, weight_decay=1e-4, gradient clip 0.1, batch 8, crop 128, seed 0, split_seed 0
+
+[셀 출력]
+{
+  "gpu": "Tesla T4",
+  "torch": "2.14.1+cu130",
+  "cuda": "13.0",
+  "split_counts": {"train": 437, "val": 48, "test": 15},
+  "model_device": "cuda:0",
+  "input_device": "cuda:0",
+  "input_shape": [8, 3, 128, 128],
+  "input_dtype": "torch.float32",
+  "input_range": [0.0, 0.22745098173618317],
+  "output_shape": [8, 3, 128, 128],
+  "curves_shape": [8, 24, 128, 128],
+  "loss": 3.0344386100769043,
+  "loss_parts": {
+    "spatial": 4.10256291161204e-08,
+    "exposure": 0.3027939796447754,
+    "color": 0.0007547118002548814,
+    "tv": 1.3627037333208136e-05
+  },
+  "loss_finite": true,
+  "grads_finite": true,
+  "grad_norm_before_clip": 0.8512360453605652,
+  "parameters_changed": "14/14",
+  "peak_memory_mb": 351.7
+}
+TASK-009 통과
+
+(배열 줄바꿈만 정리했으며 값은 전달받은 출력 그대로임)
+
+[완료 기준 확인]
+- 가중치 갱신: 파라미터 텐서 14/14개 변경
+- 유한 loss·gradient: 모두 true. 항별 값의 가중합도 total 3.0344와 일치
+- CUDA 실행: 모델·입력 모두 cuda:0 (Tesla T4)
+
+[참고]
+- 출력 기록용 float(loss) 변환에서 UserWarning 1건. backward·step 이후의 변환이라 결과에는 영향 없음
+- 최대 메모리 351.7MB는 PyTorch 할당량 기준이며 none 모드·이 배치 조건의 값
+- 분할 437/48/15는 로더가 읽은 장수. 손상·내용 중복 등 전체 데이터 감사는 TASK-004·005 범위이며 이 실행으로 검증하지 않음
