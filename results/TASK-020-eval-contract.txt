@@ -1,0 +1,49 @@
+TASK-020 실행 기록 · 평가 비교 검사·경로 고정
+날짜: 2026-11-27 (KST)
+브랜치: HyunSeong
+담당: 현성
+대상 파일: eval.py, colab/experiment.ipynb (colab/experiment.ipynb에 MODULE_CONFIG·EVAL_OUT 보완)
+환경: Google Colab, Tesla T4, torch 2.14.1+cu130, CUDA 13.0
+
+========================================================================
+1. 고정 경로 및 본실험 명령 규격
+========================================================================
+- Drive 원본 데이터: /content/drive/MyDrive/data/LOL
+- Colab 로컬 데이터 (모든 팀원 동일 필수): /content/LOL
+  * train/val 원본: /content/LOL/our485/{low,high}
+  * 공식 test 원본: /content/LOL/eval15/{low,high}
+  * 주의: train.py는 manifest에 절대 경로를 저장하므로 3계정 병렬 학습 시에도
+    반드시 모두 /content/LOL 경로로 학습해야 eval.py manifest 검사가 통과함
+- 본실험 저장 위치 (예비 lowlight_prelim_v2와 분리):
+  * 체크포인트: /content/drive/MyDrive/lowlight_runs/{mode}_seed{seed}/last.pt
+  * 평가 출력:  /content/drive/MyDrive/lowlight_evaluation/{val,test}/
+- 본실험 학습 명령 공통 형식 (E, CROP, BATCH, MODULE_CONFIG는 TASK-019 동결값 사용):
+  python train.py --low-dir /content/LOL/our485/low --high-dir /content/LOL/our485/high \
+    --test-low-dir /content/LOL/eval15/low --test-high-dir /content/LOL/eval15/high \
+    --epochs <E> --lr 0.0001 --crop-size <CROP> --batch-size <BATCH> \
+    --seed 0 --split-seed 0 --max_hours 3 --output /content/drive/MyDrive/lowlight_runs \
+    --mode <none|bright|noise|both> [--module-config <JSON>]
+- 본실험 평가 명령:
+  python eval.py --runs /content/drive/MyDrive/lowlight_runs --compare none bright noise both --split val  --output /content/drive/MyDrive/lowlight_evaluation
+  python eval.py --runs /content/drive/MyDrive/lowlight_runs --compare none bright noise both --split test --output /content/drive/MyDrive/lowlight_evaluation
+
+========================================================================
+2. 노트북 인자 전달 및 val/test 분리 확인
+========================================================================
+- colab/experiment.ipynb 보완:
+  * MODULE_CONFIG = None 및 if MODULE_CONFIG: common += ['--module-config', str(MODULE_CONFIG)] 추가
+  * EVAL_OUT = '/content/drive/MyDrive/lowlight_evaluation' 상수 분리
+  * eval.py 내부에서 out = Path(args.output) / args.split 로 val/test 자동 분리 확인
+
+========================================================================
+3. eval.py 계약 거부 실측 검증 (통과)
+========================================================================
+원본(lowlight_prelim_v2)을 /tmp에 복사해 1항목씩 변조 후 eval.py 실행:
+- [PASS rejected] module_config_mismatch (g_min=0.5)
+  -> ValueError: 데이터 분할, 에폭, 학습 설정 또는 모듈 설정이 다릅니다.
+- [PASS rejected] epochs_mismatch (epochs=99)
+  -> ValueError: 데이터 분할, 에폭, 학습 설정 또는 모듈 설정이 다릅니다.
+- [PASS rejected] manifest_mismatch (val[0].low='/content/OTHER/1.png')
+  -> ValueError: 데이터 분할, 에폭, 학습 설정 또는 모듈 설정이 다릅니다.
+- [PASS rejected] incomplete_run (complete=False)
+  -> ValueError: 미완료/시간 초과 실행은 비교할 수 없습니다
