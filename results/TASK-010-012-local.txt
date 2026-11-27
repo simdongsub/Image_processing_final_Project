@@ -1,0 +1,104 @@
+TASK-010·011·012 로컬 검증 기록
+날짜: 2026-11-27 (KST)
+담당: 환호 (팀 일정 11/26 분담 기준)
+브랜치: HwanHo (기준 main b895412)
+환경: Windows, Python 3.8.2, torch 2.4.1+cpu, numpy 1.24.4 (CPU, 합성 영상)
+코드 수정: 없음 (train.py, eval.py, model.py, loss.py, dataset.py 그대로)
+추가: tests/test_metrics.py(5개), tests/test_train_safety.py(5개), colab/experiment.ipynb의 TASK-010 A/B 셀
+
+[명령]
+PYTHONUTF8=1 python -m unittest discover -s tests
+결과: Ran 29 tests, OK (신규 10개 + 기존 19개)
+
+========================================
+TASK-012 · 평가 지표 기준값 검증
+========================================
+기준 구현: Wang et al.(2004) SSIM을 NumPy float64로 직접 작성(eval.py·model.py 함수 미사용).
+11×11 Gaussian(sigma 1.5, 정규화), 유효 영역, C1=(0.01)², C2=(0.03)², 모분산, RGB 채널별 계산 후 평균.
+(scikit-image가 설치되어 있지 않아 이 독립 구현으로 비교함)
+
+PSNR (RGB MSE, data_range 1)
+- 동일 영상: 120.0dB (mse 0 → 1e-12 하한)
+- 알려진 MSE: 0.01 → 20.000dB, 0.0025 → 26.021dB, 1e-6 → 60.000dB (소수 셋째 자리까지 일치)
+- mse < 1e-12: 120dB로 표기
+
+SSIM: eval.metrics와 float64 기준 구현의 차이
+  random 32x48            1.0e-08
+  random 11x11            4.8e-07
+  random 64x64            2.1e-08
+  random 400x600          1.6e-07   (실제 LOL 해상도)
+  dark 400x600            2.5e-08   (LOL 저조도 범위 0~0.08)
+  bright smooth 400x600   1.9e-05   (최대. float32의 E[x²]−E[x]² 계산 오차)
+  → 최대 차이 1.9e-05. SSIM을 소수 넷째 자리로 보고하면 영향 없음.
+- 동일 영상 SSIM: 1.00000 (소수 다섯째 자리까지)
+- 경계 규칙: 가로·세로 11 이상이면 유효 영역(테두리 5화소 제외)만 평균. 11×11은 유효 위치 1개.
+  10 이하이면 유효 창이 없어 replicate 패딩 전체를 평균함(표준 SSIM과 다른 값). LOL은 600×400이라 해당 없음.
+
+보조지표 (손 계산 값과 일치)
+- 과노출 비율(Y ≥ 0.98): 1/4 영역 1.0 → 0.25
+- 채널 평균 오차: 채널 평균 (0.5,0.4,0.3) vs 0.4 → 0.0667
+- 평탄 잔차 표준편차: 상수 정답(전부 평탄) + ±0.02 → 0.02. 평탄 영역이 없으면 None
+- 한계: 보조지표는 팀이 정한 근사 지표이며 노이즈·색 왜곡의 완전한 측정이 아님(README와 같음)
+
+집계 방식 참고: summary의 PSNR·SSIM은 이미지별 값의 평균(PSNR of mean MSE 아님).
+
+========================================
+TASK-011 · 시간 한도·미완료 거부
+========================================
+방법: train.time을 가짜 시계로 바꿔 손실 1회 계산 = 1초로 고정(학습 5배치 + 검증 1장 = 에폭당 6초).
+1. 에폭 중간 초과(예산 8.5초, 2번째 에폭 9초에 초과)
+   - 부분 에폭 폐기, last.pt epoch=1, complete=false, history 1개
+   - 가중치가 1에폭만 정상 학습한 실행과 완전히 같음(마지막 완료 에폭 보존)
+   - 같은 설정으로 재개해도 누적 시간이 남아 다시 멈추고 complete=false 유지
+2. 마지막 검증 중 초과(예산 11.5초, 학습 배치는 모두 예산 안, 검증 후 12초)
+   - epoch=2이지만 complete=false. 예산 12.5초면 같은 시계에서 complete=true(elapsed 12.0)
+3. eval.py가 위 미완료 체크포인트를 모두 거부(종료 코드 ≠ 0)
+4. 재개 시 max_hours를 바꾸면 거부 → 예산을 늘려 초과를 숨길 수 없음
+
+벽시계와 저장 시간 비교 (실제 시계, 3에폭)
+- 프로세스 전체 3.75초, 저장 elapsed 0.25초, 차이 3.50초
+- elapsed는 학습 루프 시작 이후만 기록. import·데이터 탐색·해시·모델 생성 시간은 빠짐
+- 안전 여유: 11/24 T4 예비 실행에서 구성당 10에폭 약 1.1~1.2분(에폭당 약 7초).
+  3시간(운영 목표 2.5시간)까지 여유가 큼. 공통 에폭은 TASK-019에서 확정.
+
+주의: 세션이 에폭 중간에 끊기면 그 부분 에폭 시간은 elapsed에 남지 않음.
+가짜 시계 시험: 실제 소비 15초 중 12초만 기록(3초 누락). 재개가 잦으면 실제 사용 시간이 기록보다 길 수 있으므로
+본 학습 중 세션이 끊기면 Colab 외부 시간(시작·종료 시각)도 함께 기록할 것.
+
+========================================
+TASK-010 · 중단·재개
+========================================
+last.pt 저장 항목: model, optimizer, 완료 에폭, elapsed, complete, settings, module_config, manifest, history,
+환경, Python·NumPy·torch·CUDA RNG, DataLoader generator 상태 (train.py 코드로 확인)
+
+1. 3번째 에폭 학습 3번째 배치에서 예외로 세션 종료를 흉내 → last.pt epoch=2, complete=false, history 2개
+2. 미완료 체크포인트는 eval.py가 거부
+3. 새 프로세스에서 같은 명령 + --resume → 3에폭 완료(complete=true)
+4. 중단 없는 3에폭 실행과 비교(num_workers=0, CPU)
+   - 모델 가중치: 완전히 같음(차이 0)
+   - optimizer 상태: 완전히 같음
+   - manifest, 에폭별 train/val loss: 완전히 같음
+5. 설정이 다르면 재개 거부: lr, split_seed, max_hours, epochs 변경 모두 "재개 설정 또는 데이터 분할이 기존 실행과 다릅니다"
+6. --resume 없이 같은 출력 경로로 시작하면 FileExistsError로 거부(덮어쓰기 방지)
+
+Colab T4 실데이터 확인 (2026-11-27, 환호 실행·출력 전달)
+절차: colab/experiment.ipynb의 TASK-010 A 셀로 3에폭 학습을 2에폭 완료 직후 강제 종료하고 Drive를 flush·unmount
+  → 런타임 연결 해제 및 삭제 → 새 런타임에서 Drive 연결·데이터 복사(/content/LOL)·공통 설정 후 TASK-010 B 셀 실행
+조건: none, 3에폭, batch 8, crop 128, lr 1e-4, seed 0, split_seed 0, num_workers 0, Tesla T4, torch 2.14.1+cu130
+결과(B 셀 출력):
+  resumed:    epoch 3, complete true, elapsed 24.7초
+  continuous: epoch 3, complete true, elapsed 21.3초
+  same_manifest: true
+  max_weight_abs_diff: 0.0
+  max_loss_abs_diff: 0.0
+  에폭별 (train_loss, val_loss), 두 실행 동일:
+    1: 2.909159, 2.768605
+    2: 2.776443, 2.488615
+    3: 2.106548, 1.050486
+판정: Drive에 저장한 체크포인트가 런타임 삭제 후에도 남았고, 새 런타임에서 재개한 결과가 중단 없는 실행과
+  가중치·loss 모두 완전히 같음. 이 조건(T4, none, workers 0)의 허용오차는 0.
+참고:
+- elapsed 차이(3.4초)는 두 런타임의 에폭 시간이 합쳐진 것이며 결과 동일성과 무관. 강제 종료된 3번째 에폭 시작분은 위 주의대로 미기록
+- 다른 모드(bright·noise·both)는 replicate 패딩 등 GPU 연산이 추가되어 결과 동일성을 따로 확인하지 않음
+- 데이터는 같은 절대 경로(/content/LOL)로 복사해야 재개가 허용됨(manifest가 절대 경로를 저장)
+- CPU 합성 데이터 사전 실행에서도 차이 0
